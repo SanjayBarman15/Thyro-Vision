@@ -1,0 +1,622 @@
+{
+  "predicted_class": 4,
+  "tirads": 4,
+  "confidence": 0.91,
+  "features": {
+    "composition": "Solid",
+    "echogenicity": "Hypoechoic",
+    "margins": "Irregular",
+    "calcifications": "None",
+    "shape": "Taller-than-wide"
+  },
+  "bounding_box": {
+    "x": 132,
+    "y": 98,
+    "width": 210,
+    "height": 180
+  },
+  "processed_path": "processed/mock-v1/class-4/doctor_x/patient_y/image_z.jpg",
+  "model_version": "mock-v1",
+  "inference_time_ms": 412,
+  "created_at": "2024-01-01T00:00:00Z"
+}
+
+
+
+  Example: patients table
+ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
+
+Policy: doctor can only see their own patients
+CREATE POLICY "Doctor sees own patients"
+ON patients
+FOR SELECT
+USING (doctor_id = auth.uid());
+
+Insert policy
+CREATE POLICY "Doctor inserts own patients"
+ON patients
+FOR INSERT
+WITH CHECK (doctor_id = auth.uid());
+
+Storage policy (Supabase SQL)
+CREATE POLICY "Doctors upload own images"
+ON storage.objects
+FOR INSERT
+USING (
+  bucket_id = 'ultrasound-images'
+  AND auth.uid()::text = (storage.foldername(name))[1]
+);
+
+
+🔐 Step 6: Separate ML / training access
+Tables ML team owns (NO frontend access):
+
+training_labels
+
+model_versions
+
+inference_logs
+
+🔒 RLS:
+
+ALTER TABLE training_labels ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Only service role"
+ON training_labels
+FOR ALL
+USING (false);
+
+
+➡️ Only backend (service role) can insert/export.
+
+
+roi_detector.py        -> model 1
+feature_classifier.py  -> model 2
+tirads.py              -> rule engine
+pipeline.py            -> orchestration
+
+
+
+def calculate_acr_tirads(
+    composition,
+    echogenicity,
+    shape,
+    margin,
+    echogenic_foci
+):
+    score = 0
+
+    # Composition
+    composition_points = {
+        "cystic": 0,
+        "spongiform": 0,
+        "mixed": 1,
+        "solid": 2
+    }
+
+    # Echogenicity
+    echogenicity_points = {
+        "anechoic": 0,
+        "hyperechoic": 1,
+        "isoechoic": 1,
+        "hypoechoic": 2,
+        "very_hypoechoic": 3
+    }
+
+    # Shape
+    shape_points = {
+        "wider_than_tall": 0,
+        "taller_than_wide": 3
+    }
+
+    # Margin
+    margin_points = {
+        "smooth": 0,
+        "ill_defined": 0,
+        "lobulated": 2,
+        "irregular": 2,
+        "extrathyroidal_extension": 3
+    }
+
+    # Echogenic foci
+    echogenic_foci_points = {
+        "none": 0,
+        "comet_tail": 0,
+        "macrocalcification": 1,
+        "rim_calcification": 2,
+        "punctate": 3
+    }
+
+    score += composition_points.get(composition, 0)
+    score += echogenicity_points.get(echogenicity, 0)
+    score += shape_points.get(shape, 0)
+    score += margin_points.get(margin, 0)
+    score += echogenic_foci_points.get(echogenic_foci, 0)
+
+    # TI-RADS Category
+    if score == 0:
+        category = "TR1 (Benign)"
+    elif score <= 2:
+        category = "TR2 (Not Suspicious)"
+    elif score == 3:
+        category = "TR3 (Mildly Suspicious)"
+    elif score <= 6:
+        category = "TR4 (Moderately Suspicious)"
+    else:
+        category = "TR5 (Highly Suspicious)"
+
+    return score, category
+
+
+
+
+//main.py
+import os
+import logging
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.utils.logger import log_event
+from app.api.images import router as images_router
+from app.api.patients import router as patients_router
+from app.api.inference import router as inference_router
+from app.api.feedback import router as feedback_router
+from app.api.logs import router as logs_router
+from app.middleware.request_id import request_id_middleware
+from app.api import reports
+
+
+# ---------------------------
+# Load environment variables (local dev only)
+# Render env vars will override
+# ---------------------------
+load_dotenv(override=True)
+
+# ---------------------------
+# Logger (Uvicorn logger)
+# ---------------------------
+logger = logging.getLogger("uvicorn")
+
+# ---------------------------
+# FastAPI App
+# ---------------------------
+app = FastAPI(
+    title="ThyroVision Backend",
+    description="Backend API for Thyroid Ultrasound Analysis System",
+    version=os.getenv("VERSION", "1.0.0")
+)
+
+# ---------------------------
+# Register request ID middleware
+# ---------------------------
+app.middleware("http")(request_id_middleware)
+
+# ---------------------------
+# CORS Configuration
+# ---------------------------
+origins_env = os.getenv("CORS_ORIGINS", "")
+origins = [o.strip() for o in origins_env.split(",") if o.strip()] if origins_env else []
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins if origins else ["*"],   # fallback for local dev
+    allow_credentials=bool(origins),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------
+# API Routers
+# ---------------------------
+app.include_router(images_router)
+app.include_router(patients_router)
+app.include_router(inference_router)
+app.include_router(feedback_router)
+app.include_router(logs_router)
+app.include_router(reports.router)
+
+# ---------------------------
+# Error Handlers
+# ---------------------------
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    req_id = getattr(request.state, "request_id", None)
+    log_event(
+        level="ERROR",
+        action="VALIDATION_ERROR",
+        request_id=req_id,
+        error_code="422",
+        error_message="Input validation failed",
+        metadata={"errors": exc.errors()},
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    req_id = getattr(request.state, "request_id", None)
+    
+    # Extract status code if available
+    status_code = getattr(exc, "status_code", 500)
+    
+    log_event(
+        level="FATAL" if status_code >= 500 else "ERROR",
+        action="SERVER_ERROR",
+        request_id=req_id,
+        exception=exc,
+        error_code=str(status_code),
+        metadata={"type": type(exc).__name__},
+    )
+    return JSONResponse(status_code=status_code, content={"detail": "Internal Server Error"})
+
+# ---------------------------
+# Favicon
+# ---------------------------
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("favicon.ico")
+
+@app.get("/", tags=["Health"])
+async def health_check():
+    return {
+        "status": "ok",
+        "service": "ThyroVision Backend",
+        "version": os.getenv("VERSION", "1.0.0")
+    }
+
+# ---------------------------
+# Debug Endpoint
+# ---------------------------
+@app.get("/debug-env", tags=["Health"])
+async def debug_env():
+    return {
+        "SUPABASE_URL": os.getenv("SUPABASE_URL"),
+        "ANON_KEY_LEN": len(os.getenv("SUPABASE_ANON_KEY", "")),
+        "SERVICE_KEY_LEN": len(os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")),
+        "ANON_KEY_PREFIX": os.getenv("SUPABASE_ANON_KEY", "")[:10]
+    }
+
+# ---------------------------
+# Startup Validation & Banner
+# ---------------------------
+@app.on_event("startup")
+async def startup_validation():
+    try:
+        # Check required env vars
+        required_envs = [
+            "SUPABASE_URL",
+            "SUPABASE_ANON_KEY",
+            "SUPABASE_SERVICE_ROLE_KEY",
+        ]
+        missing = [env for env in required_envs if not os.getenv(env)]
+        if missing:
+            raise RuntimeError(f"Missing required environment variables: {missing}")
+
+        # Banner info
+        host = os.getenv("HOST", "127.0.0.1")
+        port = os.getenv("PORT", "8000")
+        version = os.getenv("VERSION", "1.0.0")
+        render_url = os.getenv("RENDER_EXTERNAL_URL")
+
+        logger.info("________________________________")
+        logger.info("ThyroVision Backend is running🚀")
+        logger.info("Status  : 200 OK ✅")
+        logger.info("Service : ThyroVision Backend🏥")
+        logger.info(f"Version : {version}")
+        logger.info(f"URL     : {render_url or f'http://{host}:{port}'}")
+        logger.info("________________________________")
+        logger.info("********************************")
+
+    except Exception as e:
+        logger.error("❌ ThyroVision Backend failed to start")
+        logger.error(str(e))
+        raise  # re-raise so Render fails deployment
+
+
+
+
+My recommendations — prioritised:
+Tier 1 — Core clinical workflow (build now):
+1. Longitudinal tracking
+   Multiple scans per patient, timeline view
+   "New Scan for existing patient" flow
+   Side-by-side comparison of TI-RADS over time
+
+2. Search + filter on dashboard
+   Search by patient name, DOB
+   Filter by TI-RADS level, date range
+   Sort by last scan date
+
+3. Report storage
+   Store export event in DB (patient_id, generated_at, tirads_at_export)
+   Show "Last exported: March 22" on analysis page
+   List of reports in patient detail view
+Tier 2 — Clinical intelligence (build after Tier 1):
+4. Follow-up reminders
+   ACR recommends specific follow-up intervals by TI-RADS:
+     TR3 → follow-up at 1 year, 3 years, 5 years
+     TR4 → FNA if ≥1.5cm, follow-up at 1 year
+     TR5 → FNA if ≥1cm, follow-up at 6 months
+   Store next_followup_date on predictions
+   Show overdue patients on dashboard with badge
+   Email reminder (can use Supabase Edge Functions)
+
+5. AI Scan Comparison
+   When doctor opens a patient with multiple scans,
+   show delta: TI-RADS change, nodule size change, feature changes
+   Flag regressions: TR3 → TR5 is a red alert
+   This uses data already in your DB — no extra ML needed
+
+6. Report tracking
+   Simple — add exported_at to predictions
+   Show download history per patient
+Tier 3 — Nice to have (build last):
+7. Chatbot on analysis page
+   Already have Gemini — add chat UI
+   System prompt includes scan context automatically
+   Keep it focused: only answers questions about this specific scan
+
+8. Dashboard analytics for doctor
+   How many patients in each TI-RADS category
+   Patients overdue for follow-up
+   Your busiest months (scan volume)
+
+One feature you haven't mentioned that I'd add:
+Patient Detail Page — right now you go from dashboard → analysis. There's no patient-level view. You need:
+/patients/[id]
+  ├── Patient info (name, DOB, gender)
+  ├── Scan timeline (all scans chronologically)
+  │     Mar 22, 2026 — TR4 — [View] [Export]
+  │     Nov 15, 2025 — TR3 — [View] [Export]
+  │     Jul 02, 2025 — TR2 — [View] [Export]
+  ├── TI-RADS trend chart (line chart over time)
+  ├── Next follow-up date
+  └── [New Scan] button
+Without this page, longitudinal tracking has nowhere to live.
+
+
+
+15/04/2026-stabel main.py
+# backend/main.py
+import os
+import logging
+from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.utils.logger import log_event
+from app.api.admin import router as admin_router
+from app.api.images import router as images_router
+from app.api.patients import router as patients_router
+from app.api.inference import router as inference_router
+from app.api.feedback import router as feedback_router
+from app.api.logs import router as logs_router
+from app.api.benchmark import router as benchmark_router
+from app.tasks.celery_app import celery
+from app.middleware.request_id import request_id_middleware
+from app.api import reports
+
+# ---------------------------
+# Load environment variables
+# ---------------------------
+load_dotenv(override=True)
+
+# ---------------------------
+# Logger
+# ---------------------------
+logger = logging.getLogger("uvicorn")
+
+# ---------------------------
+# Helpers
+# ---------------------------
+def get_required_env(key: str) -> str:
+    value = os.getenv(key)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {key}")
+    return value
+
+
+def is_production() -> bool:
+    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+
+
+# ---------------------------
+# Startup validation
+# ---------------------------
+async def startup_validation():
+    required_envs = [
+        "SUPABASE_URL",
+        "SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "PIPELINE_VERSION",
+        "ROI_DETECTOR_VERSION",
+        "FEATURE_CLASSIFIER_VERSION",
+        "RULE_ENGINE_VERSION",
+    ]
+
+    missing = [env for env in required_envs if not os.getenv(env)]
+    if missing:
+        raise RuntimeError(f"Missing required environment variables: {missing}")
+
+    if os.getenv("MOCK_MODELS", "false").lower() != "true":
+        weight_vars = {
+            "ROI_DETECTOR_WEIGHTS": os.getenv("ROI_DETECTOR_WEIGHTS"),
+            "FEATURE_CLASSIFIER_WEIGHTS": os.getenv("FEATURE_CLASSIFIER_WEIGHTS"),
+        }
+        for var_name, path in weight_vars.items():
+            if path and not os.path.isfile(path):
+                raise RuntimeError(f"Model weight file not found: {path}")
+
+    host = os.getenv("HOST", "127.0.0.1")
+    port = os.getenv("PORT", "8000")
+    version = os.getenv("VERSION", "1.0.0")
+    render_url = os.getenv("RENDER_EXTERNAL_URL")
+    env = os.getenv("ENVIRONMENT", "development")
+
+    logger.info("________________________________")
+    logger.info("ThyroVision Backend is running 🚀")
+    logger.info(f"Environment : {env.upper()}")
+    logger.info(f"Version     : {version}")
+    logger.info(f"URL         : {render_url or f'http://{host}:{port}'}")
+    logger.info("________________________________")
+    logger.info(f"Pipeline    : {os.getenv('PIPELINE_VERSION')}")
+    logger.info(f"ROI Model   : {os.getenv('ROI_DETECTOR_VERSION')}")
+    logger.info(f"Classifier  : {os.getenv('FEATURE_CLASSIFIER_VERSION')}")
+    logger.info(f"Rule Engine : {os.getenv('RULE_ENGINE_VERSION')}")
+    logger.info(f"Mock Models : {os.getenv('MOCK_MODELS', 'false')}")
+    logger.info("________________________________")
+
+    try:
+        i = celery.control.inspect(timeout=1.0)
+        nodes = i.ping() or {}
+        if nodes:
+            logger.info(f"Celery Worker: ONLINE ({len(nodes)} nodes) ✅")
+        else:
+            logger.warning("Celery Worker: OFFLINE ⚠️")
+    except Exception as e:
+        logger.error(f"Celery Worker ERROR: {e}")
+
+    logger.info("________________________________")
+
+
+# ---------------------------
+# Lifespan
+# ---------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        await startup_validation()
+        logger.info("✅ Startup complete")
+    except Exception as e:
+        logger.error("❌ Startup failed")
+        logger.error(str(e))
+        raise
+
+    yield
+
+    logger.info("Shutting down...")
+
+
+# ---------------------------
+# FastAPI App
+# ---------------------------
+app = FastAPI(
+    title="ThyroVision Backend",
+    version=os.getenv("VERSION", "1.0.0"),
+    lifespan=lifespan,
+    docs_url=None if is_production() else "/docs",
+    redoc_url=None if is_production() else "/redoc",
+)
+
+# ---------------------------
+# Middleware
+# ---------------------------
+app.middleware("http")(request_id_middleware)
+
+origins_env = os.getenv("CORS_ORIGINS", "")
+origins = [o.strip() for o in origins_env.split(",") if o.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins if origins else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------
+# Routers
+# ---------------------------
+app.include_router(images_router)
+app.include_router(patients_router)
+app.include_router(inference_router)
+app.include_router(feedback_router)
+app.include_router(logs_router)
+app.include_router(reports.router)
+app.include_router(benchmark_router)
+app.include_router(admin_router)
+
+# ---------------------------
+# Error Handlers
+# ---------------------------
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    log_event(
+        level="ERROR",
+        action="VALIDATION_ERROR",
+        metadata={"errors": exc.errors()},
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    status_code = getattr(exc, "status_code", 500)
+
+    log_event(
+        level="FATAL" if status_code >= 500 else "ERROR",
+        action="SERVER_ERROR",
+        exception=exc,
+    )
+
+    if not is_production():
+        return JSONResponse(status_code=status_code, content={"detail": str(exc)})
+
+    return JSONResponse(status_code=status_code, content={"detail": "Internal Server Error"})
+
+
+# ---------------------------
+# Favicon
+# ---------------------------
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("favicon.ico")
+
+
+# ---------------------------
+# EXISTING HEALTH (UNCHANGED)
+# ---------------------------
+@app.get("/", tags=["Health"])
+async def health_check():
+    return {
+        "status": "ok",
+        "service": "ThyroVision Backend",
+        "version": os.getenv("VERSION", "1.0.0"),
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "pipeline_version": os.getenv("PIPELINE_VERSION", "unknown"),
+    }
+
+
+# ---------------------------
+# NEW: Lightweight Health
+# ---------------------------
+@app.get("/health", tags=["Health"])
+async def health():
+    return {"status": "ok"}
+
+
+# ---------------------------
+# NEW: Readiness Check
+# ---------------------------
+@app.get("/ready", tags=["Health"])
+async def readiness_check():
+    celery_status = "unknown"
+
+    try:
+        i = celery.control.inspect(timeout=1.0)
+        nodes = i.ping() or {}
+        celery_status = "online" if nodes else "offline"
+    except Exception:
+        celery_status = "error"
+
+    return {
+        "status": "ready",
+        "celery": celery_status,
+        "environment": os.getenv("ENVIRONMENT", "development"),
+    }

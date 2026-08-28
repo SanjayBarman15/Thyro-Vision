@@ -1,0 +1,29 @@
+fastapi
+uvicorn
+python-multipart
+supabase
+python-dotenv
+pydantic
+pydantic-settings
+pillow
+google-genai
+reportlab
+resend
+firebase-admin
+
+#Xception model
+# tensorflow>=2.10.0
+torch>=1.10.0
+torchvision>=0.11.0
+timm>=0.6.0
+opencv-python-headless>=4.5.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+matplotlib>=3.5.0
+Pillow>=8.0.0
+
+celery==5.3.6
+redis==5.0.1
+
+# For XML parsing
+lxml
