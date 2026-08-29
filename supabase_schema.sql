@@ -1,0 +1,278 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.doctors (
+  id uuid NOT NULL,
+  name text,
+  email text NOT NULL UNIQUE,
+  created_at timestamp without time zone DEFAULT now(),
+  updated_at timestamp without time zone,
+  role text NOT NULL DEFAULT 'doctor'::text CHECK (role = ANY (ARRAY['doctor'::text, 'admin'::text])),
+  age integer,
+  department text,
+  hospital text,
+  CONSTRAINT doctors_pkey PRIMARY KEY (id),
+  CONSTRAINT doctors_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.patients (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  doctor_id uuid NOT NULL,
+  first_name text,
+  last_name text,
+  dob date,
+  age integer,
+  gender text,
+  created_at timestamp without time zone DEFAULT now(),
+  past_medical_data text,
+  next_followup_date date,
+  followup_notes text,
+  total_scans integer DEFAULT 0,
+  CONSTRAINT patients_pkey PRIMARY KEY (id),
+  CONSTRAINT patients_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.raw_images (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  patient_id uuid NOT NULL,
+  doctor_id uuid NOT NULL,
+  file_path text NOT NULL,
+  file_url text NOT NULL,
+  uploaded_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT raw_images_pkey PRIMARY KEY (id),
+  CONSTRAINT raw_images_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
+  CONSTRAINT raw_images_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.processed_images (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  raw_image_id uuid NOT NULL,
+  file_path text NOT NULL,
+  file_url text NOT NULL,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT processed_images_pkey PRIMARY KEY (id),
+  CONSTRAINT processed_images_raw_image_id_fkey FOREIGN KEY (raw_image_id) REFERENCES public.raw_images(id)
+);
+CREATE TABLE public.predictions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  raw_image_id uuid NOT NULL,
+  predicted_class integer NOT NULL,
+  tirads integer NOT NULL CHECK (tirads >= 1 AND tirads <= 5),
+  confidence double precision NOT NULL CHECK (confidence >= 0::double precision AND confidence <= 1::double precision),
+  model_version text NOT NULL,
+  training_candidate boolean DEFAULT false,
+  inference_time_ms integer CHECK (inference_time_ms >= 0),
+  processed_image_id uuid,
+  created_at timestamp without time zone DEFAULT now(),
+  features jsonb,
+  bounding_box jsonb,
+  model_metadata jsonb,
+  ai_explanation text,
+  explanation_metadata jsonb,
+  tirads_confidences jsonb NOT NULL DEFAULT '{}'::jsonb,
+  report_id text UNIQUE,
+  followup_recommended_days integer,
+  followup_due_date date,
+  CONSTRAINT predictions_pkey PRIMARY KEY (id),
+  CONSTRAINT predictions_raw_image_id_fkey FOREIGN KEY (raw_image_id) REFERENCES public.raw_images(id),
+  CONSTRAINT predictions_processed_image_id_fkey FOREIGN KEY (processed_image_id) REFERENCES public.processed_images(id)
+);
+CREATE TABLE public.prediction_feedback (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  prediction_id uuid NOT NULL,
+  doctor_id uuid NOT NULL,
+  is_correct boolean NOT NULL,
+  corrected_tirads integer CHECK (corrected_tirads >= 1 AND corrected_tirads <= 5),
+  corrected_features jsonb,
+  comments text,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT prediction_feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT prediction_feedback_prediction_id_fkey FOREIGN KEY (prediction_id) REFERENCES public.predictions(id),
+  CONSTRAINT prediction_feedback_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.training_labels (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  raw_image_id uuid NOT NULL,
+  labeled_by text NOT NULL,
+  tirads integer NOT NULL CHECK (tirads >= 1 AND tirads <= 5),
+  bounding_boxes jsonb,
+  notes text,
+  approved boolean DEFAULT false,
+  created_at timestamp without time zone DEFAULT now(),
+  status text NOT NULL DEFAULT 'draft'::text CHECK (status = ANY (ARRAY['draft'::text, 'approved'::text, 'rejected'::text])),
+  claimed_by uuid,
+  claimed_at timestamp without time zone,
+  reviewed_by uuid,
+  reviewed_at timestamp without time zone,
+  rejection_reason text,
+  corrected_features jsonb,
+  metadata jsonb,
+  exported_at timestamp with time zone,
+  first_exported_in uuid,
+  CONSTRAINT training_labels_pkey PRIMARY KEY (id),
+  CONSTRAINT training_labels_raw_image_id_fkey FOREIGN KEY (raw_image_id) REFERENCES public.raw_images(id),
+  CONSTRAINT training_labels_claimed_by_fkey FOREIGN KEY (claimed_by) REFERENCES public.doctors(id),
+  CONSTRAINT training_labels_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.doctors(id),
+  CONSTRAINT training_labels_first_exported_in_fkey FOREIGN KEY (first_exported_in) REFERENCES public.dataset_exports(id)
+);
+CREATE TABLE public.system_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  level text NOT NULL CHECK (level = ANY (ARRAY['INFO'::text, 'WARN'::text, 'ERROR'::text, 'FATAL'::text])),
+  action text NOT NULL,
+  actor_id uuid,
+  actor_role text CHECK (actor_role = ANY (ARRAY['doctor'::text, 'system'::text, 'admin'::text])),
+  resource_type text,
+  resource_id uuid,
+  request_id uuid NOT NULL,
+  metadata jsonb,
+  error_code text,
+  error_message text,
+  created_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT system_logs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.model_performance (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  model_version text NOT NULL,
+  pipeline_version text,
+  total_predictions integer NOT NULL DEFAULT 0,
+  correct_predictions integer NOT NULL DEFAULT 0,
+  incorrect_predictions integer NOT NULL DEFAULT 0,
+  accuracy double precision,
+  avg_confidence double precision,
+  avg_inference_time_ms double precision,
+  tirads_distribution jsonb,
+  feedback_rate double precision,
+  recorded_at timestamp without time zone DEFAULT now(),
+  recorded_by uuid,
+  model_metadata jsonb,
+  CONSTRAINT model_performance_pkey PRIMARY KEY (id),
+  CONSTRAINT model_performance_recorded_by_fkey FOREIGN KEY (recorded_by) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.dataset_exports (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  exported_by uuid,
+  exported_at timestamp with time zone DEFAULT now(),
+  label_count integer NOT NULL DEFAULT 0,
+  image_count integer NOT NULL DEFAULT 0,
+  skipped_count integer NOT NULL DEFAULT 0,
+  export_mode text NOT NULL DEFAULT 'full'::text CHECK (export_mode = ANY (ARRAY['full'::text, 'incremental'::text])),
+  model_version_target text,
+  pipeline_version text,
+  notes text,
+  CONSTRAINT dataset_exports_pkey PRIMARY KEY (id),
+  CONSTRAINT dataset_exports_exported_by_fkey FOREIGN KEY (exported_by) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.benchmark_images (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  storage_path text NOT NULL,
+  file_url text NOT NULL,
+  ground_truth_tirads integer NOT NULL CHECK (ground_truth_tirads >= 1 AND ground_truth_tirads <= 5),
+  ground_truth_features jsonb NOT NULL,
+  ground_truth_bbox jsonb,
+  description text,
+  added_at timestamp with time zone DEFAULT now(),
+  added_by uuid,
+  is_active boolean DEFAULT true,
+  CONSTRAINT benchmark_images_pkey PRIMARY KEY (id),
+  CONSTRAINT benchmark_images_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.benchmark_runs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pipeline_version text NOT NULL,
+  model_metadata jsonb,
+  triggered_by uuid,
+  recorded_at timestamp with time zone DEFAULT now(),
+  bbox_accuracy double precision,
+  avg_iou double precision,
+  bbox_correct_count integer,
+  iou_threshold double precision DEFAULT 0.5,
+  avg_roi_ms integer,
+  bbox_regressions integer DEFAULT 0,
+  bbox_improvements integer DEFAULT 0,
+  tirads_accuracy double precision,
+  tirads_correct_count integer,
+  feature_accuracy jsonb,
+  confusion_matrix jsonb,
+  avg_xception_ms integer,
+  tirads_regressions integer DEFAULT 0,
+  tirads_improvements integer DEFAULT 0,
+  dataset_size integer DEFAULT 20,
+  CONSTRAINT benchmark_runs_pkey PRIMARY KEY (id),
+  CONSTRAINT benchmark_runs_triggered_by_fkey FOREIGN KEY (triggered_by) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.benchmark_results (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  benchmark_run_id uuid NOT NULL,
+  benchmark_image_id uuid NOT NULL,
+  image_description text,
+  image_index integer,
+  predicted_bbox jsonb,
+  ground_truth_bbox jsonb,
+  iou_score double precision,
+  bbox_correct boolean,
+  roi_confidence double precision,
+  roi_inference_time_ms integer,
+  predicted_tirads integer,
+  ground_truth_tirads integer,
+  tirads_correct boolean DEFAULT (predicted_tirads = ground_truth_tirads),
+  tirads_delta integer DEFAULT (predicted_tirads - ground_truth_tirads),
+  predicted_features jsonb,
+  ground_truth_features jsonb,
+  feature_accuracy jsonb,
+  xception_inference_time_ms integer,
+  prev_predicted_tirads integer,
+  prev_iou_score double precision,
+  tirads_is_regression boolean,
+  tirads_is_improvement boolean,
+  bbox_is_regression boolean,
+  bbox_is_improvement boolean,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT benchmark_results_pkey PRIMARY KEY (id),
+  CONSTRAINT benchmark_results_benchmark_run_id_fkey FOREIGN KEY (benchmark_run_id) REFERENCES public.benchmark_runs(id),
+  CONSTRAINT benchmark_results_benchmark_image_id_fkey FOREIGN KEY (benchmark_image_id) REFERENCES public.benchmark_images(id)
+);
+CREATE TABLE public.report_exports (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  prediction_id uuid,
+  patient_id uuid,
+  doctor_id uuid,
+  report_id text,
+  exported_at timestamp with time zone DEFAULT now(),
+  tirads_at_export integer,
+  pipeline_version text,
+  CONSTRAINT report_exports_pkey PRIMARY KEY (id),
+  CONSTRAINT report_exports_prediction_id_fkey FOREIGN KEY (prediction_id) REFERENCES public.predictions(id),
+  CONSTRAINT report_exports_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
+  CONSTRAINT report_exports_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
+);
+CREATE TABLE public.reminder_logs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  recipient_id uuid,
+  patient_id uuid,
+  event_type text NOT NULL,
+  channel text NOT NULL,
+  status text NOT NULL,
+  metadata jsonb,
+  sent_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT reminder_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT reminder_logs_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES auth.users(id),
+  CONSTRAINT reminder_logs_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id)
+);
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  email text,
+  fcm_token text,
+  last_seen_at timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.clinical_audit_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  prediction_id uuid,
+  timestamp timestamp with time zone DEFAULT now(),
+  input_context jsonb NOT NULL,
+  ai_raw_output text NOT NULL,
+  validation_errors jsonb,
+  tirads_version text DEFAULT 'ACR-2017'::text,
+  model_version text NOT NULL,
+  CONSTRAINT clinical_audit_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT clinical_audit_logs_prediction_id_fkey FOREIGN KEY (prediction_id) REFERENCES public.predictions(id)
+);

@@ -38,6 +38,11 @@ export default function AuthProvider({
           // Extract role from custom claim in JWT
           let role = 'doctor';
           if (session?.access_token) {
+            console.log("\n=======================================================");
+            console.log("🔑 BEARER TOKEN (Supabase Access Token):");
+            console.log(session.access_token);
+            console.log("=======================================================\n");
+
             try {
               const payload = JSON.parse(atob(session.access_token.split('.')[1]));
               role = payload.user_role || 
@@ -56,6 +61,16 @@ export default function AuthProvider({
         setLoading(false)
       }
     )
+
+    // Also print token immediately on mount if session already exists
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.access_token) {
+        console.log("\n=======================================================");
+        console.log("🔑 CURRENT BEARER TOKEN (From Active Session):");
+        console.log(session.access_token);
+        console.log("=======================================================\n");
+      }
+    })
 
     return () => {
       subscription.unsubscribe()
