@@ -29,14 +29,7 @@ export default function LandingPage() {
         {/* Hero Section */}
         <section className="px-4 py-20 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-4xl text-center">
-            <div className="mb-6 flex justify-center">
-              <Badge
-                variant="outline"
-                className="border-primary/50 text-primary"
-              >
-                Clinical Decision Support
-              </Badge>
-            </div>
+
             <h1 className="mb-6 text-5xl font-bold leading-tight text-foreground sm:text-6xl">
               AI-Assisted Thyroid Ultrasound Analysis
             </h1>

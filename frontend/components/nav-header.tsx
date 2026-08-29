@@ -31,7 +31,7 @@ export function NavHeader() {
             >
               Process
             </Link>
-            <Link
+            {/* <Link
               href="/contact"
               className={`text-sm font-medium transition-colors hover:text-primary ${
                 pathname === "/contact"
@@ -40,7 +40,7 @@ export function NavHeader() {
               }`}
             >
               Team
-            </Link>
+            </Link> */}
           </nav>
         </div>
 
