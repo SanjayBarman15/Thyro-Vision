@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Sparkles,
   MapPin,
+  SlidersHorizontal,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import {
@@ -21,16 +22,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { feedbackFormClasses } from "@/lib/colors";
+import {
+  ACR_FEATURES,
+  ACRFeature,
+  BBoxData,
+} from "@/components/admin/curation/annotation/types";
+import BBoxCorrectionDialog from "@/components/bbox-correction-dialog";
 
 interface FeedbackFormProps {
   predictionId: string;
   existingFeedback?: any;
+  imageUrl?: string;
+  aiBbox?: BBoxData | null;
   onSuccess?: () => void;
 }
 
 export default function FeedbackForm({
   predictionId,
   existingFeedback,
+  imageUrl,
+  aiBbox,
   onSuccess,
 }: FeedbackFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,13 +49,15 @@ export default function FeedbackForm({
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [correctedTirads, setCorrectedTirads] = useState<number | null>(null);
   const [comments, setComments] = useState("");
-  const [incorrectFeatures, setIncorrectFeatures] = useState<string[]>([]);
+  const [featureCorrections, setFeatureCorrections] = useState<
+    Record<string, { value: string; points: number; description: string }>
+  >({});
   const [error, setError] = useState<string | null>(null);
 
   // ── BBox feedback state ───────────────────────────────────
   const [bboxCorrect, setBboxCorrect] = useState<boolean | null>(null);
-  const [bboxIssue, setBboxIssue] = useState<string | null>(null);
-  const [bboxHint, setBboxHint] = useState("");
+  const [correctedBbox, setCorrectedBbox] = useState<BBoxData | null>(null);
+  const [isBboxModalOpen, setIsBboxModalOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -54,26 +67,48 @@ export default function FeedbackForm({
       setIsCorrect(existingFeedback.is_correct);
       setCorrectedTirads(existingFeedback.corrected_tirads);
       setComments(existingFeedback.comments || "");
-      if (existingFeedback.corrected_features?.incorrect_fields) {
-        setIncorrectFeatures(
-          existingFeedback.corrected_features.incorrect_fields,
+      if (existingFeedback.corrected_features?.feature_corrections) {
+        setFeatureCorrections(
+          existingFeedback.corrected_features.feature_corrections,
         );
+      } else if (existingFeedback.corrected_features?.incorrect_fields) {
+        // Fallback for legacy feedback: map string items
+        const legacyMap: Record<
+          string,
+          { value: string; points: number; description: string }
+        > = {};
+        for (const field of existingFeedback.corrected_features.incorrect_fields) {
+          const key = field.toLowerCase().replace(/ /g, "_");
+          legacyMap[key] = { value: "incorrect", points: 0, description: field };
+        }
+        setFeatureCorrections(legacyMap);
       }
       // ── Restore bbox state ──
       if (existingFeedback.corrected_features?.bbox_correct !== undefined) {
         setBboxCorrect(existingFeedback.corrected_features.bbox_correct);
-        setBboxIssue(existingFeedback.corrected_features.bbox_issue ?? null);
-        setBboxHint(existingFeedback.corrected_features.bbox_hint ?? "");
+      }
+      if (existingFeedback.corrected_features?.corrected_bbox) {
+        setCorrectedBbox(existingFeedback.corrected_features.corrected_bbox);
       }
     }
   }, [existingFeedback]);
 
-  const toggleFeature = (feature: string) => {
-    setIncorrectFeatures((prev) =>
-      prev.includes(feature)
-        ? prev.filter((f) => f !== feature)
-        : [...prev, feature],
-    );
+  const handleSelectFeatureCorrection = (
+    featureKey: string,
+    option: { value: string; points: number; description: string },
+  ) => {
+    setFeatureCorrections((prev) => ({
+      ...prev,
+      [featureKey]: option,
+    }));
+  };
+
+  const handleRemoveFeatureCorrection = (featureKey: string) => {
+    setFeatureCorrections((prev) => {
+      const next = { ...prev };
+      delete next[featureKey];
+      return next;
+    });
   };
 
   const handleSubmit = async () => {
@@ -109,10 +144,12 @@ export default function FeedbackForm({
             corrected_features: isCorrect
               ? null
               : {
-                  incorrect_fields: incorrectFeatures,
-                  bbox_correct:     bboxCorrect ?? true,
-                  bbox_issue:       bboxCorrect === false ? bboxIssue : null,
-                  bbox_hint:        bboxCorrect === false ? bboxHint || null : null,
+                  feature_corrections: featureCorrections,
+                  incorrect_fields: Object.keys(featureCorrections),
+                  bbox_correct: bboxCorrect ?? true,
+                  corrected_bbox: bboxCorrect === false ? correctedBbox : null,
+                  bbox_issue: bboxCorrect === false ? (correctedBbox ? "nodule_position_wrong" : null) : null,
+                  bbox_hint: null,
                 },
             comments: comments || null,
           }),
@@ -160,21 +197,6 @@ export default function FeedbackForm({
       </div>
     );
   }
-
-  const features = [
-    "Composition",
-    "Echogenicity",
-    "Margins",
-    "Calcifications",
-    "Shape",
-  ];
-
-  const bboxIssues = [
-    { value: "nodule_position_wrong", label: "Nodule position is wrong"       },
-    { value: "nodule_size_wrong",     label: "Nodule size is wrong"            },
-    { value: "false_positive",        label: "False positive (no nodule here)" },
-    { value: "nodule_missed",         label: "Nodule was missed"               },
-  ];
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card/50 shadow-xl overflow-hidden">
@@ -281,28 +303,119 @@ export default function FeedbackForm({
               </DropdownMenu>
             </div>
 
-            {/* ── Incorrect features ── */}
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase text-muted-foreground
-                                 font-bold tracking-wider">
-                Incorrect features (optional)
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {features.map((feature) => (
-                  <button
-                    key={feature}
-                    type="button"
-                    onClick={() => toggleFeature(feature)}
-                    className={`px-3 py-2 rounded-xl text-xs font-medium
-                                border transition-all cursor-pointer ${
-                      incorrectFeatures.includes(feature)
-                        ? feedbackFormClasses.incorrectFeature.active
-                        : "bg-muted/30 border-border text-muted-foreground hover:border-muted-foreground/40"
-                    }`}
-                  >
-                    {feature}
-                  </button>
-                ))}
+            {/* ── Incorrect sub-features ── */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase text-muted-foreground
+                                   font-bold tracking-wider flex items-center gap-1.5">
+                  <SlidersHorizontal className="h-3 w-3" />
+                  Feature corrections (optional)
+                </label>
+                {Object.keys(featureCorrections).length > 0 && (
+                  <span className="text-[10px] font-semibold text-primary">
+                    {Object.keys(featureCorrections).length} feature{Object.keys(featureCorrections).length > 1 ? "s" : ""} adjusted
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {(Object.keys(ACR_FEATURES) as (keyof typeof ACR_FEATURES)[]).map((featureKey) => {
+                  const featureDef = ACR_FEATURES[featureKey];
+                  const correction = featureCorrections[featureKey];
+
+                  return (
+                    <div
+                      key={featureKey}
+                      className={`flex items-center justify-between gap-2 p-2.5 rounded-xl border transition-all ${
+                        correction
+                          ? "bg-primary/5 border-primary/40 shadow-xs"
+                          : "bg-muted/20 border-border/70 hover:border-border"
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-foreground">
+                            {featureDef.label}
+                          </span>
+                          {correction && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-primary/15 text-primary">
+                              +{correction.points} pts
+                            </span>
+                          )}
+                        </div>
+                        {correction ? (
+                          <p className="text-[11px] text-foreground/80 font-medium truncate mt-0.5">
+                            {correction.description || correction.value}
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                            Click to correct sub-feature
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={`h-8 px-2.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+                                correction
+                                  ? "border-primary/40 bg-background text-primary hover:bg-primary/10"
+                                  : "border-border bg-background/80 text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              <span>{correction ? "Change" : "Select"}</span>
+                              <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-60" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            className="w-72 rounded-xl border-border bg-popover p-1 shadow-xl"
+                            align="end"
+                          >
+                            <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/40">
+                              {featureDef.label} Options
+                            </div>
+                            {featureDef.options.map((opt) => (
+                              <DropdownMenuItem
+                                key={opt.value}
+                                onClick={() =>
+                                  handleSelectFeatureCorrection(featureKey, {
+                                    value: opt.value,
+                                    points: opt.points,
+                                    description: opt.description,
+                                  })
+                                }
+                                className={`cursor-pointer rounded-lg px-2.5 py-2 text-xs flex items-center justify-between gap-2 my-0.5 ${
+                                  correction?.value === opt.value
+                                    ? "bg-primary/15 text-primary font-semibold"
+                                    : "hover:bg-muted"
+                                }`}
+                              >
+                                <span className="truncate">{opt.description}</span>
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground shrink-0">
+                                  +{opt.points} pts
+                                </span>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {correction && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFeatureCorrection(featureKey)}
+                            className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                            title="Remove correction"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -320,8 +433,7 @@ export default function FeedbackForm({
                   type="button"
                   onClick={() => {
                     setBboxCorrect(true);
-                    setBboxIssue(null);
-                    setBboxHint("");
+                    setCorrectedBbox(null);
                   }}
                   className={`h-10 rounded-xl border-2 text-xs font-medium
                               transition-all cursor-pointer ${
@@ -337,7 +449,12 @@ export default function FeedbackForm({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setBboxCorrect(false)}
+                  onClick={() => {
+                    setBboxCorrect(false);
+                    if (imageUrl) {
+                      setIsBboxModalOpen(true);
+                    }
+                  }}
                   className={`h-10 rounded-xl border-2 text-xs font-medium
                               transition-all cursor-pointer ${
                     bboxCorrect === false
@@ -352,56 +469,74 @@ export default function FeedbackForm({
                 </button>
               </div>
 
-              {/* Issue type + hint — only when location incorrect */}
+              {/* BBox Drawing Card / Action — only when location incorrect */}
               {bboxCorrect === false && (
                 <div className="space-y-3 pt-1">
+                  {correctedBbox ? (
+                    <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/20 text-emerald-400">
+                            <Check className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="text-xs font-semibold text-emerald-300">
+                            Corrected Box Applied
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsBboxModalOpen(true)}
+                            className="h-7 px-2 text-[11px] rounded-lg border-emerald-500/30 bg-background text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
+                          >
+                            Edit Box
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setCorrectedBbox(null)}
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive rounded-lg cursor-pointer"
+                            title="Clear box"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
 
-                  {/* Issue options */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase text-muted-foreground
-                                       font-bold tracking-wider">
-                      Detection issue
-                    </label>
-                    <div className="space-y-2">
-                      {bboxIssues.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setBboxIssue(option.value)}
-                          className={`w-full text-left px-3 py-2.5 rounded-xl
-                                      text-xs font-medium border transition-all
-                                      cursor-pointer ${
-                            bboxIssue === option.value
-                              ? "bg-blue-500/10 border-blue-500/40 text-blue-400"
-                              : "bg-muted/30 border-border text-muted-foreground hover:border-muted-foreground/40"
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
+                      {/* Coordinates chips */}
+                      <div className="grid grid-cols-4 gap-1.5 pt-1">
+                        <div className="bg-background/80 px-2 py-1 rounded-md border border-border/50 text-center">
+                          <span className="text-[9px] text-muted-foreground uppercase block font-bold">X</span>
+                          <span className="text-[11px] font-mono font-medium text-foreground">{Math.round(correctedBbox.x)}</span>
+                        </div>
+                        <div className="bg-background/80 px-2 py-1 rounded-md border border-border/50 text-center">
+                          <span className="text-[9px] text-muted-foreground uppercase block font-bold">Y</span>
+                          <span className="text-[11px] font-mono font-medium text-foreground">{Math.round(correctedBbox.y)}</span>
+                        </div>
+                        <div className="bg-background/80 px-2 py-1 rounded-md border border-border/50 text-center">
+                          <span className="text-[9px] text-muted-foreground uppercase block font-bold">Width</span>
+                          <span className="text-[11px] font-mono font-medium text-foreground">{Math.round(correctedBbox.width)}</span>
+                        </div>
+                        <div className="bg-background/80 px-2 py-1 rounded-md border border-border/50 text-center">
+                          <span className="text-[9px] text-muted-foreground uppercase block font-bold">Height</span>
+                          <span className="text-[11px] font-mono font-medium text-foreground">{Math.round(correctedBbox.height)}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Location hint */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase text-muted-foreground
-                                       font-bold tracking-wider">
-                      Location hint for annotator (optional)
-                    </label>
-                    <textarea
-                      value={bboxHint}
-                      onChange={(e) => setBboxHint(e.target.value)}
-                      placeholder="e.g. Nodule is more lateral, upper region..."
-                      rows={2}
-                      className="w-full px-4 py-3 rounded-xl border border-border
-                                 bg-background/50 text-sm text-foreground
-                                 placeholder:text-muted-foreground
-                                 focus:outline-none focus:ring-2
-                                 focus:ring-primary/20 focus:border-primary/40
-                                 resize-none transition-all"
-                    />
-                  </div>
-
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsBboxModalOpen(true)}
+                      className="w-full h-11 rounded-xl border-dashed border-2 border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary font-semibold text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <MapPin className="h-4 w-4" />
+                      Click to Draw Corrected Nodule Box
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -462,6 +597,19 @@ export default function FeedbackForm({
         </Button>
 
       </div>
+
+      {/* ── BBox Drawing Modal ── */}
+      <BBoxCorrectionDialog
+        isOpen={isBboxModalOpen}
+        onClose={() => setIsBboxModalOpen(false)}
+        imageUrl={imageUrl}
+        aiBbox={aiBbox}
+        initialBbox={correctedBbox}
+        onSave={(newBbox) => {
+          setCorrectedBbox(newBbox);
+          setBboxCorrect(false);
+        }}
+      />
     </div>
   );
 } 

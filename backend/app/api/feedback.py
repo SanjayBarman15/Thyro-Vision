@@ -60,32 +60,44 @@ def create_draft_training_label(
         corrected_features = feedback_data.get("corrected_features") or {}
         bbox_correct = corrected_features.get("bbox_correct", True)
         tirads_correct = feedback_data.get("is_correct", True)
+        feature_corrections = corrected_features.get("feature_corrections") or {}
 
-        needs_bbox_correction   = not bbox_correct
-        needs_tirads_correction = not tirads_correct
+        needs_bbox_correction    = not bbox_correct
+        needs_tirads_correction  = not tirads_correct
+        needs_feature_correction = bool(feature_corrections)
 
         # ── Build metadata for admin context ────────────────
         metadata = {
-            "needs_bbox_correction":   needs_bbox_correction,
+            "needs_bbox_correction":    needs_bbox_correction,
             "needs_tirads_correction":  needs_tirads_correction,
-            "bbox_issue":              corrected_features.get("bbox_issue"),
-            "ai_bbox":                 prediction.get("bounding_box"),
-            "ai_tirads":               prediction.get("tirads"),
-            "ai_confidence":           confidence,
-            "feedback_id":             feedback_data.get("id"),
+            "needs_feature_correction": needs_feature_correction,
+            "bbox_issue":               corrected_features.get("bbox_issue"),
+            "feature_corrections":      feature_corrections,
+            "ai_bbox":                  prediction.get("bounding_box"),
+            "ai_tirads":                prediction.get("tirads"),
+            "ai_confidence":            confidence,
+            "feedback_id":              feedback_data.get("id"),
         }
+
+        corrected_bbox = corrected_features.get("corrected_bbox")
+        bounding_boxes = (
+            corrected_bbox
+            if (corrected_bbox and isinstance(corrected_bbox, dict))
+            else prediction.get("bounding_box")
+        )
 
         # ── Create draft training label ──────────────────────
         label_data = {
-            "raw_image_id":  raw_image_id,
-            "labeled_by":    "doctor",
-            "tirads":        feedback_data.get("corrected_tirads")
-                             or prediction.get("tirads"),
-            "bounding_boxes": prediction.get("bounding_box"),
-            "notes":         feedback_data.get("comments"),
-            "approved":      False,
-            "status":        "draft",
-            "metadata":      metadata,
+            "raw_image_id":         raw_image_id,
+            "labeled_by":           "doctor",
+            "tirads":               feedback_data.get("corrected_tirads")
+                                    or prediction.get("tirads"),
+            "bounding_boxes":       bounding_boxes,
+            "corrected_features":   corrected_features,
+            "notes":                feedback_data.get("comments"),
+            "approved":             False,
+            "status":               "draft",
+            "metadata":             metadata,
         }
 
         result = supabase_admin.table("training_labels") \

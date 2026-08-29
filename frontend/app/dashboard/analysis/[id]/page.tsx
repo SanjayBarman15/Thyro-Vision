@@ -283,6 +283,8 @@ export default function AnalysisPage({
                 <FeedbackForm
                   predictionId={analysis?.predictionId}
                   existingFeedback={analysis?.existingFeedback}
+                  imageUrl={currentImageUrl || undefined}
+                  aiBbox={analysis?.boundingBox}
                   onSuccess={() =>
                     console.log("Feedback submitted successfully")
                   }
