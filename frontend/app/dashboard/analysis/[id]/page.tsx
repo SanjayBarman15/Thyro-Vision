@@ -283,6 +283,7 @@ export default function AnalysisPage({
                 <FeedbackForm
                   predictionId={analysis?.predictionId}
                   existingFeedback={analysis?.existingFeedback}
+                  initialClinicalFeatures={analysis?.clinicalFeatures}
                   imageUrl={currentImageUrl || undefined}
                   aiBbox={analysis?.boundingBox}
                   onSuccess={() =>

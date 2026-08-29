@@ -26,12 +26,14 @@ import {
   ACR_FEATURES,
   ACRFeature,
   BBoxData,
+  calculateTirads,
 } from "@/components/admin/curation/annotation/types";
 import BBoxCorrectionDialog from "@/components/bbox-correction-dialog";
 
 interface FeedbackFormProps {
   predictionId: string;
   existingFeedback?: any;
+  initialClinicalFeatures?: Record<string, any>;
   imageUrl?: string;
   aiBbox?: BBoxData | null;
   onSuccess?: () => void;
@@ -40,6 +42,7 @@ interface FeedbackFormProps {
 export default function FeedbackForm({
   predictionId,
   existingFeedback,
+  initialClinicalFeatures,
   imageUrl,
   aiBbox,
   onSuccess,
@@ -60,6 +63,27 @@ export default function FeedbackForm({
   const [isBboxModalOpen, setIsBboxModalOpen] = useState(false);
 
   const supabase = createClient();
+
+  // ── Calculate real-time ACR points & TI-RADS level ──────────
+  const acrKeys = Object.keys(ACR_FEATURES) as (keyof typeof ACR_FEATURES)[];
+
+  const featurePointsBreakdown = acrKeys.map((key) => {
+    const correction = featureCorrections[key];
+    const baseFeature = initialClinicalFeatures?.[key];
+    const points = correction
+      ? correction.points
+      : (typeof baseFeature?.points === "number" ? baseFeature.points : 0);
+    const label = ACR_FEATURES[key].label;
+    const isOverridden = !!correction;
+    return { key, label, points, isOverridden };
+  });
+
+  const totalCalculatedPoints = featurePointsBreakdown.reduce(
+    (sum, item) => sum + item.points,
+    0,
+  );
+
+  const recalculatedTiradsLevel = calculateTirads(totalCalculatedPoints);
 
   useEffect(() => {
     if (existingFeedback) {
@@ -97,18 +121,39 @@ export default function FeedbackForm({
     featureKey: string,
     option: { value: string; points: number; description: string },
   ) => {
-    setFeatureCorrections((prev) => ({
-      ...prev,
+    const updated = {
+      ...featureCorrections,
       [featureKey]: option,
-    }));
+    };
+    setFeatureCorrections(updated);
+
+    // Auto-sync TI-RADS score with newly calculated points
+    let pointsSum = 0;
+    for (const key of acrKeys) {
+      if (updated[key]) {
+        pointsSum += updated[key].points;
+      } else if (typeof initialClinicalFeatures?.[key]?.points === "number") {
+        pointsSum += initialClinicalFeatures[key].points;
+      }
+    }
+    setCorrectedTirads(calculateTirads(pointsSum));
   };
 
   const handleRemoveFeatureCorrection = (featureKey: string) => {
-    setFeatureCorrections((prev) => {
-      const next = { ...prev };
-      delete next[featureKey];
-      return next;
-    });
+    const updated = { ...featureCorrections };
+    delete updated[featureKey];
+    setFeatureCorrections(updated);
+
+    // Auto-sync TI-RADS score with newly calculated points
+    let pointsSum = 0;
+    for (const key of acrKeys) {
+      if (updated[key]) {
+        pointsSum += updated[key].points;
+      } else if (typeof initialClinicalFeatures?.[key]?.points === "number") {
+        pointsSum += initialClinicalFeatures[key].points;
+      }
+    }
+    setCorrectedTirads(calculateTirads(pointsSum));
   };
 
   const handleSubmit = async () => {
@@ -269,11 +314,23 @@ export default function FeedbackForm({
 
             {/* ── TI-RADS correction ── */}
             <div className="space-y-2">
-              <label className="text-[10px] uppercase text-muted-foreground
-                                 font-bold tracking-wider flex items-center gap-1.5">
-                <Sparkles className="h-3 w-3" />
-                Correct TI-RADS level
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase text-muted-foreground
+                                   font-bold tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3" />
+                  Correct TI-RADS level
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setCorrectedTirads(recalculatedTiradsLevel)}
+                  className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all cursor-pointer"
+                  title="Click to apply recalculated TI-RADS level"
+                >
+                  <Sparkles className="h-2.5 w-2.5" />
+                  Recalculated: TR{recalculatedTiradsLevel} ({totalCalculatedPoints} pts)
+                </button>
+              </div>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -281,7 +338,14 @@ export default function FeedbackForm({
                     className="w-full justify-between h-11 rounded-xl
                                border-border bg-background/50 font-medium"
                   >
-                    {correctedTirads ? `TR${correctedTirads}` : "Select level"}
+                    <span className="flex items-center gap-2">
+                      {correctedTirads ? `TR${correctedTirads}` : "Select level"}
+                      {correctedTirads === recalculatedTiradsLevel && (
+                        <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                          Matches calculated ({totalCalculatedPoints} pts)
+                        </span>
+                      )}
+                    </span>
                     <ChevronDown className="h-4 w-4 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -294,13 +358,38 @@ export default function FeedbackForm({
                     <DropdownMenuItem
                       key={val}
                       onClick={() => setCorrectedTirads(val)}
-                      className="cursor-pointer rounded-lg font-medium"
+                      className="cursor-pointer rounded-lg font-medium flex items-center justify-between"
                     >
-                      TI-RADS {val}
+                      <span>TI-RADS {val}</span>
+                      {val === recalculatedTiradsLevel && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/15 text-primary">
+                          Calculated ({totalCalculatedPoints} pts)
+                        </span>
+                      )}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              {/* Points breakdown summary */}
+              <div className="flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground pt-0.5 px-0.5">
+                <span className="font-semibold text-foreground/70">ACR Points:</span>
+                {featurePointsBreakdown.map((item) => (
+                  <span
+                    key={item.key}
+                    className={`px-1.5 py-0.5 rounded ${
+                      item.isOverridden
+                        ? "bg-primary/15 text-primary font-bold"
+                        : "bg-muted/40 text-muted-foreground"
+                    }`}
+                  >
+                    {item.label}: {item.points}p
+                  </span>
+                ))}
+                <span className="font-bold text-foreground ml-auto">
+                  = {totalCalculatedPoints} pts &rarr; TR{recalculatedTiradsLevel}
+                </span>
+              </div>
             </div>
 
             {/* ── Incorrect sub-features ── */}
