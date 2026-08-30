@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.utils.logger import log_event
 from app.middleware.request_id import request_id_middleware
+from app.services.explainability.rag.kb_loader import kb_loader
 
 from app.api.admin import router as admin_router
 from app.api.images import router as images_router
@@ -97,6 +98,15 @@ async def startup_validation():
             logger.warning("Celery: OFFLINE")
     except Exception as e:
         logger.error(f"Celery error: {e}")
+    logger.info("===================================")
+
+    # Pre-load ACR TI-RADS Knowledge Base for RAG
+    try:
+        kb_loader.load()
+        loaded_levels = list(kb_loader._kb_index.keys())
+        logger.info(f"📚 Knowledge Base loaded: TR levels {loaded_levels}")
+    except Exception as e:
+        logger.warning(f"KB load warning (non-fatal): {e}")
     logger.info("===================================")
 
 

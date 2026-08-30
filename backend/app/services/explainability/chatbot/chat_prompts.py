@@ -48,9 +48,35 @@ DIAGNOSTIC_USER_PROMPT_TEMPLATE = """
 - Size: {size_mm} mm
 - Simulation Data: {simulation_data}
 
+### RETRIEVED ACR TI-RADS GUIDELINE (AUTHORITATIVE — USE VERBATIM FOR ANALYSIS TEXT)
+{kb_analysis_text}
+
+### ACR RECOMMENDATION FOR THIS COMBINATION
+{kb_recommendation}
+
 ### USER QUERY
 {user_message}
 
 ### FINAL INSTRUCTION
 Generate a JSON-structured response following the defined Clinera contract. 
+Your rationale must be grounded in the Retrieved ACR TI-RADS Guideline text above.
+The scoring_breakdown MUST reflect the exact feature values and points from Scan Context.
 """
+
+# ── Thinking Step Labels ──────────────────────────────────────────────────────
+# These are streamed as [THINKING_STEP] SSE events before the actual response.
+# They reflect REAL internal operations being performed.
+THINKING_STEPS = [
+    {"step": 1, "label": "Analysing feature profile against ACR TI-RADS criteria"},
+    {"step": 2, "label": "Retrieving matching guideline from clinical knowledge base"},
+    {"step": 3, "label": "Running deterministic scoring simulation"},
+    {"step": 4, "label": "Synthesising diagnostic assessment"},
+]
+
+THINKING_STEPS_SIMULATION = [
+    {"step": 1, "label": "Detecting hypothetical modification intent"},
+    {"step": 2, "label": "Applying modified feature set to ACR scoring rules"},
+    {"step": 3, "label": "Retrieving updated guideline"},
+    {"step": 4, "label": "Computing clinical delta and implications"},
+    {"step": 5, "label": "Synthesising comparative diagnostic narrative"},
+]
