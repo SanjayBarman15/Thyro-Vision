@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070B14"/>
+      <stop offset="50%" stop-color="#0B132B"/>
+      <stop offset="100%" stop-color="#050811"/>
+    </linearGradient>
+
+    <!-- Accent Glow Gradients -->
+    <linearGradient id="cyanEmerald" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="50%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+
+    <linearGradient id="purplePink" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+
+    <!-- Neon Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+      </feMerge>
+    </filter>
+
+    <!-- Grid Pattern -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1E293B" stroke-width="0.8" opacity="0.4"/>
+    </pattern>
+  </defs>
+
+  <!-- Background Layer -->
+  <rect width="1200" height="420" fill="url(#bgGrad)"/>
+  <rect width="1200" height="420" fill="url(#grid)"/>
+
+  <!-- Ambient Light Orbs -->
+  <circle cx="280" cy="210" r="140" fill="#00F0FF" opacity="0.12" filter="url(#softGlow)"/>
+  <circle cx="360" cy="230" r="100" fill="#8B5CF6" opacity="0.1" filter="url(#softGlow)"/>
+  <circle cx="950" cy="180" r="160" fill="#10B981" opacity="0.08" filter="url(#softGlow)"/>
+
+  <!-- Left Side: Thyroid AI Diagnostic Emblem -->
+  <g transform="translate(130, 70)">
+    <!-- Sonar / Ultrasound Echo Rings -->
+    <ellipse cx="140" cy="140" rx="130" ry="110" fill="none" stroke="#00F0FF" stroke-width="1.2" stroke-dasharray="6,8" opacity="0.25"/>
+    <ellipse cx="140" cy="140" rx="100" ry="85" fill="none" stroke="#38BDF8" stroke-width="1" stroke-dasharray="4,6" opacity="0.35"/>
+    <ellipse cx="140" cy="140" rx="70" ry="60" fill="none" stroke="#10B981" stroke-width="1" opacity="0.3"/>
+
+    <!-- Thyroid Gland Stylized Wings (Left Lobe & Right Lobe) -->
+    <!-- Left Lobe -->
+    <path d="M 130 90 C 80 40, 25 80, 45 155 C 60 210, 115 220, 130 180 Z" 
+          fill="url(#cyanEmerald)" opacity="0.85" filter="url(#glow)"/>
+    <!-- Right Lobe -->
+    <path d="M 150 90 C 200 40, 255 80, 235 155 C 220 210, 165 220, 150 180 Z" 
+          fill="url(#cyanEmerald)" opacity="0.85" filter="url(#glow)"/>
+    <!-- Isthmus (Connecting Bridge) -->
+    <path d="M 120 160 Q 140 185 160 160 Q 140 150 120 160 Z" 
+          fill="#38BDF8" opacity="0.9"/>
+
+    <!-- Neural Network Nodes & Synapses Overlay -->
+    <line x1="65" y1="120" x2="105" y2="155" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+    <line x1="105" y1="155" x2="140" y2="135" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+    <line x1="140" y1="135" x2="175" y2="155" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+    <line x1="175" y1="155" x2="215" y2="120" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+    <line x1="105" y1="155" x2="140" y2="190" stroke="#00F0FF" stroke-width="1.5" opacity="0.7"/>
+    <line x1="175" y1="155" x2="140" y2="190" stroke="#00F0FF" stroke-width="1.5" opacity="0.7"/>
+
+    <circle cx="65" cy="120" r="4.5" fill="#FFFFFF" filter="url(#glow)"/>
+    <circle cx="105" cy="155" r="5" fill="#00F0FF" filter="url(#glow)"/>
+    <circle cx="140" cy="135" r="6" fill="#38BDF8" filter="url(#glow)"/>
+    <circle cx="175" cy="155" r="5" fill="#10B981" filter="url(#glow)"/>
+    <circle cx="215" cy="120" r="4.5" fill="#FFFFFF" filter="url(#glow)"/>
+    <circle cx="140" cy="190" r="4" fill="#00F0FF" filter="url(#glow)"/>
+
+    <!-- AI Bounding Box & Crosshairs for Targeted Nodule ROI -->
+    <g transform="translate(60, 95)">
+      <rect x="0" y="0" width="70" height="70" fill="none" stroke="#EC4899" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.9"/>
+      <!-- Corners -->
+      <path d="M -4 8 L -4 -4 L 8 -4" fill="none" stroke="#00F0FF" stroke-width="2.5"/>
+      <path d="M 62 -4 L 74 -4 L 74 8" fill="none" stroke="#00F0FF" stroke-width="2.5"/>
+      <path d="M -4 62 L -4 74 L 8 74" fill="none" stroke="#00F0FF" stroke-width="2.5"/>
+      <path d="M 62 74 L 74 74 L 74 62" fill="none" stroke="#00F0FF" stroke-width="2.5"/>
+      <!-- Label -->
+      <rect x="-4" y="-22" width="62" height="15" rx="3" fill="#EC4899" opacity="0.9"/>
+      <text x="3" y="-11" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700">TR5 • 96.4%</text>
+    </g>
+  </g>
+
+  <!-- Right Side: Brand Typography & Meta Details -->
+  <g transform="translate(460, 130)">
+    <!-- Main Title -->
+    <text x="0" y="60" fill="url(#cyanEmerald)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" font-size="64" font-weight="900" letter-spacing="1.5" filter="url(#glow)">
+      ThyroVision
+    </text>
+
+    <!-- Subtitle -->
+    <text x="5" y="105" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" font-size="20" font-weight="600" letter-spacing="0.5">
+      Advanced Thyroid Ultrasound AI Diagnosis &amp; Decision Support
+    </text>
+
+    <!-- Secondary Tagline -->
+    <text x="5" y="135" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" font-size="14" font-weight="400">
+      Dual-Stage Faster R-CNN • ACR TI-RADS Classification • Grad-CAM Explainable AI
+    </text>
+
+    <!-- Tech Badges Bar -->
+    <g transform="translate(5, 170)">
+      <!-- Badge: ACR TI-RADS -->
+      <rect x="0" y="0" width="135" height="30" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+      <circle cx="14" cy="15" r="4" fill="#00F0FF"/>
+      <text x="26" y="20" fill="#F8FAFC" font-family="sans-serif" font-size="12" font-weight="600">ACR TI-RADS</text>
+
+      <!-- Badge: PyTorch -->
+      <rect x="145" y="0" width="105" height="30" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+      <circle cx="159" cy="15" r="4" fill="#EE4C2C"/>
+      <text x="171" y="20" fill="#F8FAFC" font-family="sans-serif" font-size="12" font-weight="600">PyTorch</text>
+
+      <!-- Badge: FastAPI -->
+      <rect x="260" y="0" width="100" height="30" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+      <circle cx="274" cy="15" r="4" fill="#10B981"/>
+      <text x="286" y="20" fill="#F8FAFC" font-family="sans-serif" font-size="12" font-weight="600">FastAPI</text>
+
+      <!-- Badge: Next.js -->
+      <rect x="370" y="0" width="100" height="30" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+      <circle cx="384" cy="15" r="4" fill="#38BDF8"/>
+      <text x="396" y="20" fill="#F8FAFC" font-family="sans-serif" font-size="12" font-weight="600">Next.js 16</text>
+
+      <!-- Badge: Grad-CAM XAI -->
+      <rect x="480" y="0" width="130" height="30" rx="6" fill="#1E293B" stroke="#334155" stroke-width="1"/>
+      <circle cx="494" cy="15" r="4" fill="#8B5CF6"/>
+      <text x="506" y="20" fill="#F8FAFC" font-family="sans-serif" font-size="12" font-weight="600">Grad-CAM XAI</text>
+    </g>
+  </g>
+
+  <!-- Bottom Accent Gradient Line -->
+  <rect x="0" y="415" width="1200" height="5" fill="url(#cyanEmerald)"/>
+</svg>

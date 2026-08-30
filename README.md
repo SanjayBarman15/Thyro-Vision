@@ -1,6 +1,7 @@
 <p align="center">
-  <img src="https://img.icons8.com/fluency/120/ultrasound.png" alt="ThyroVision Logo" width="120" />
+  <img src="banner.svg" alt="ThyroVision Banner" width="100%" />
 </p>
+
 
 <h1 align="center">ThyroVision 🩺</h1>
 <p align="center">
