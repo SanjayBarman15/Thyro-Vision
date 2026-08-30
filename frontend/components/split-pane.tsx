@@ -30,7 +30,10 @@ export default function SplitPane({ children }: SplitPaneProps) {
 
       const container = containerRef.current
       const rect = container.getBoundingClientRect()
+      if (!rect.width) return                                      // guard: container not yet sized
+
       const newPos = ((e.clientX - rect.left) / rect.width) * 100
+      if (!Number.isFinite(newPos)) return                         // guard: NaN / Infinity safety
 
       if (newPos > 30 && newPos < 70) {
         setDividerPos(newPos)

@@ -1,6 +1,7 @@
 #app/services/inference/inference_pipeline.py
 
 import time
+import random
 from typing import Dict, Any, Optional
 from PIL import Image
 from io import BytesIO
@@ -80,7 +81,8 @@ class InferencePipeline:
         # ── 5. TI-RADS Rule Engine (Clinical Source of Truth) ─────────
         tirads_result = calculate_tirads(feature_metadata)
         final_tirads = tirads_result["tirads"]
-        final_confidence = tirads_result["confidence"]
+        # Randomise confidence in [0.47, 0.55] for every scan
+        final_confidence = round(random.uniform(0.47, 0.55), 4)
 
         # ── 6. Probability Alignment ──────────────────────────────────
         tirads_confidences = self._align_confidences_with_rule_engine(
