@@ -3,7 +3,7 @@
 </p>
 
 
-<h1 align="center">ThyroVision 🩺</h1>
+<!-- <h1 align="center">ThyroVision 🩺</h1> -->
 <p align="center">
   <strong>Advanced Thyroid Ultrasound AI Diagnosis & Decision Support System</strong>
 </p>
