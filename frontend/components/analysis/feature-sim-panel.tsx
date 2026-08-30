@@ -41,7 +41,7 @@ const FEATURE_OPTIONS = {
     emoji: "📐",
     options: [
       { value: "wider_than_tall", label: "Wider than tall", pts: 0 },
-      { value: "taller_than_wide", label: "Taller than wide ⚠️", pts: 3 },
+      { value: "taller_than_wide", label: "Taller than wide", pts: 3 },
     ],
   },
   margin: {
@@ -52,7 +52,7 @@ const FEATURE_OPTIONS = {
       { value: "ill_defined", label: "Ill-defined", pts: 0 },
       { value: "lobulated", label: "Lobulated or irregular", pts: 2 },
       { value: "irregular", label: "Irregular", pts: 2 },
-      { value: "extrathyroidal_extension", label: "Extra-thyroidal extension ⚠️", pts: 3 },
+      { value: "extrathyroidal_extension", label: "Extra-thyroidal extension", pts: 3 },
     ],
   },
   echogenic_foci: {
@@ -62,8 +62,8 @@ const FEATURE_OPTIONS = {
       { value: "none", label: "None", pts: 0 },
       { value: "macrocalcifications", label: "Macrocalcifications", pts: 1 },
       { value: "peripheral", label: "Peripheral / Rim calcifications", pts: 2 },
-      { value: "punctate_echogenic_foci", label: "Punctate echogenic foci ⚠️", pts: 3 },
-      { value: "microcalcifications", label: "Microcalcifications ⚠️", pts: 3 },
+      { value: "punctate_echogenic_foci", label: "Punctate echogenic foci", pts: 3 },
+      { value: "microcalcifications", label: "Microcalcifications", pts: 3 },
     ],
   },
 };
