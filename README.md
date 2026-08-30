@@ -116,7 +116,7 @@ project/
 
 - **Language:** Python
 - **Framework:** FastAPI
-- **Deployment:** Docker container on Render
+- **Deployment:** Docker container (Docker Hub: [ayan888/thyrovision-backend:v1.0.2](https://hub.docker.com/repository/docker/ayan888/thyrovision-backend/tags/v1.0.2/sha256:1f3ae90136ae4bdcdade9b4be2c785c244c44174aca02e3c859bd2cadb222741))
 
 ```
 backend/
@@ -358,7 +358,8 @@ target_layer = model.backbone.layer4[-1]
 
 ### 13.1 Backend (Render)
 
-- **Service Type:** Docker Web Service
+- **Service Type:** Docker Web Service / Custom Container
+- **Docker Hub Image:** [ayan888/thyrovision-backend:v1.0.2](https://hub.docker.com/repository/docker/ayan888/thyrovision-backend/tags/v1.0.2/sha256:1f3ae90136ae4bdcdade9b4be2c785c244c44174aca02e3c859bd2cadb222741)
 - **Root Directory:** `/backend`
 - **Environment Variables:**
   - `SUPABASE_URL`
