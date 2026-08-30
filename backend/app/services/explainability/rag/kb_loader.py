@@ -99,17 +99,24 @@ class KBLoader:
 
     def _find_kb_dir(self) -> Optional[Path]:
         """Locate the Knowledge Base directory relative to the project root."""
-        candidates = [
-            Path(__file__).parents[6] / "Knowledge Base",   # from backend/app/services/explainability/rag/ up
-            Path(__file__).parents[5] / "Knowledge Base",
-            Path(__file__).parents[4] / "Knowledge Base",
-            Path(__file__).parents[3] / "Knowledge Base",
+        candidates = []
+        
+        # Add all parent directories of this file safely
+        for p in Path(__file__).parents:
+            candidates.append(p / "Knowledge Base")
+            
+        # Add current working directory options
+        candidates.extend([
             Path(os.getcwd()) / "Knowledge Base",
             Path(os.getcwd()).parent / "Knowledge Base",
-        ]
+        ])
+        
         for c in candidates:
-            if c.exists():
-                return c
+            try:
+                if c.exists():
+                    return c
+            except Exception:
+                continue
         return None
 
     def load(self):
